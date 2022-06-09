@@ -78,6 +78,7 @@ def randomColorList(amount: int):
     return ["#" + ''.join([random.choice('0123456789ABCDEF') for j in range(6)]) for i in range(amount)]
 
 def pie_chart_paises(db):
+    # pandas ya tiene una función para hacer el quilombo de abajo pero bueno... No hay tiempo para cambiarlo de nuevo
     paisDict = {}
     paisDict = defaultdict(lambda:0, paisDict)
     for x in db.index:
@@ -143,54 +144,66 @@ def media_tiempo_de_envio_por_pais(paisDict: defaultdict):
         mediaPaises[pais] = sum(l) / len(l)
     return mediaPaises
 
-def findOrigen(paisDict, provincia, localidad):
-    for ind, y in enumerate(paisDict[provincia]):
-        if y[0] == localidad:
-            return ind
-    return -1
-
-def lista_de_porcentajes(li: list):
-    pct = []
-    for x in li:
-        pct.append(x / sum(li) * 100)
-    return pct
-
 def stacked_bar_localidades(db):
     provincias = db['provincia'].value_counts().index.tolist() # todas las provincias.
-    local = db.loc[db['provincia'] == provincias[0]] # filtrado para obtener solo los elementos con esa provincia
-    localidades = local['origen_especifico'].value_counts() # localidades
-    labels_5 = localidades.index.tolist().copy()[:4] # elegimos solo 4 y stackeamos los demás restantes en "Otros"
-    localidades_5 = localidades.tolist().copy()[:4]
-    otros = 0
-    for x in localidades.tolist()[4:]:
-        otros += x
-    localidades_5.append(otros)
-    labels_5.append('Otros')
-    # 0 ganas de renegar, hacemos un dataframe y lo ordenamos
-    data = {'freq': localidades_5}
-    df = pd.DataFrame(data, index=labels_5)
+    for y in provincias:
+        local = db.loc[db['provincia'] == y] # filtrado para obtener solo los elementos con esa provincia
+        localidades = local['origen_especifico'].value_counts() # localidades
+        labels_5 = localidades.index.tolist().copy()[:4] # elegimos solo 4 y stackeamos los demás restantes en "Otros"
+        localidades_5 = localidades.tolist().copy()[:4]
+        otros = 0
+        ylabel = 'Frecuencia'
+        for x in localidades.tolist()[4:]:
+            otros += x
+        if len(localidades_5) >= 4:
+            localidades_5.append(otros)
+            labels_5.append('Otros')
+        if (sum(localidades_5) >= 50):
+            localidades_5 = [np.log(lo) for lo in localidades_5]
+            ylabel = 'Logaritmo de frecuencia'
+        # 0 ganas de renegar, hacemos un dataframe y lo ordenamos
+        data = {'freq': localidades_5}
+        df = pd.DataFrame(data, index=labels_5)
+        df = df.sort_values('freq', ascending=True)
+        
+        dfT = df.T
+        
+        rcParams['figure.dpi'] = 150
+        rcParams['figure.figsize'] = (1, 3)
+        ax = dfT.plot.bar(stacked=True)
+        ax.legend(bbox_to_anchor=(1.05, 1))
+        ax.set_xlabel(y)
+        ax.set_ylabel(ylabel)
+        ax.set_xticks([])
+        # No queremos floats en las frecuencias, excepto en log(freq)
+        if sum(localidades_5) < 50:
+            yticks = []
+            locs, lab = plt.yticks()
+            for tick in locs:
+                yticks.append(int(tick))
+            plt.yticks(yticks)
+        ax.plot()
+        
+        ax.get_figure().savefig(f'provincia_{y}.png', bbox_inches='tight')
+
+def pie_chart_provincias(provincias):
+    legend = provincias.index.tolist().copy()[:4]
+    legend.append('Otros')
+    frecuencias = provincias.tolist().copy()[:4]
+    aux = sum(provincias.tolist()[5:])
+    frecuencias.append(aux)
+    data = {'freq': frecuencias}
+    df = pd.DataFrame(data, index=legend)
     df = df.sort_values('freq', ascending=True)
-    localidades_5 = df['freq'].tolist()
+    legend = df.index
     
-    dfT = df.T
+    rcParams['figure.dpi'] = 150
+    rcParams['figure.figsize'] = (6, 9)
+    plt.pie(df['freq'], labels=legend, autopct='%1.1f%%')
+    plt.title('Frecuencia de provincias')
+    plt.axis('equal')
     
-    ax = dfT.plot.bar(stacked=True)
-    ax.legend(bbox_to_anchor=(1.05, 1))
-    ax.set_xlabel(provincias[0])
-    ax.set_ylabel('Frecuencia')
-    ax.set_xticks([])
-    ax.plot()
-    
-    # rcParams['figure.dpi'] = 150
-    # rcParams['figure.figsize'] = (6, 9)
-    # plt.bar(0, localidades_5[0], edgecolor = 'black', width = 0.2)
-    # for i in range (1, len(localidades_5)):
-    #     plt.bar(0, localidades_5[i], bottom = localidades_5[i-1], edgecolor = 'black', width = 0.2)
-    # plt.legend(labels_5, bbox_to_anchor=(1.05, 1))
-    # plt.ylabel('Frecuencia')
-    # plt.xlabel(provincias[0])
-    # plt.xticks([])
-    # plt.show()
+    plt.savefig('pieProvincias.png', bbox_inches='tight')
 
 db = loadDatabase()
 
@@ -229,9 +242,8 @@ for idx, x in paisDict.items():
     mini, maxi = min_max(x)
     print(f'{idx}: Min: {mini} - Max: {maxi}')
 
-provinciasFrec = db['provincia'].value_counts()
-
 stacked_bar_localidades(db)
-# print(provinciasFrec)
+provinciasFrec = db['provincia'].value_counts()
+pie_chart_provincias(provinciasFrec)
 
 # db.to_csv('Exportaciones_d.csv')
