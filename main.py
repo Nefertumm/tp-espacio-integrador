@@ -149,29 +149,48 @@ def findOrigen(paisDict, provincia, localidad):
             return ind
     return -1
 
-def provincia_origen_especifico(db):
-    paisDict = {}
-    paisDict = defaultdict(list)
-    total = 0
-    for x in db.index:
-        provincia = db['provincia'][x]
-        localidad = db['origen_especifico'][x]
-        index = findOrigen(paisDict, provincia, localidad)
-        if index != -1:
-            paisDict[provincia][index][1] += 1
-        else:
-            paisDict[provincia].append([localidad, 1])
-        total += 1
-    return (paisDict, total)
+def lista_de_porcentajes(li: list):
+    pct = []
+    for x in li:
+        pct.append(x / sum(li) * 100)
+    return pct
 
-def cantPorProvincia(paisDict):
-    listaProvincia = []
-    for idx, x in paisDict.items():
-        aux = 0
-        for y in x:
-            aux += y[1]
-        listaProvincia.append((idx, aux))
-    return listaProvincia
+def stacked_bar_localidades(db):
+    provincias = db['provincia'].value_counts().index.tolist() # todas las provincias.
+    local = db.loc[db['provincia'] == provincias[0]] # filtrado para obtener solo los elementos con esa provincia
+    localidades = local['origen_especifico'].value_counts() # localidades
+    labels_5 = localidades.index.tolist().copy()[:4] # elegimos solo 4 y stackeamos los demás restantes en "Otros"
+    localidades_5 = localidades.tolist().copy()[:4]
+    otros = 0
+    for x in localidades.tolist()[4:]:
+        otros += x
+    localidades_5.append(otros)
+    labels_5.append('Otros')
+    # 0 ganas de renegar, hacemos un dataframe y lo ordenamos
+    data = {'freq': localidades_5}
+    df = pd.DataFrame(data, index=labels_5)
+    df = df.sort_values('freq', ascending=True)
+    localidades_5 = df['freq'].tolist()
+    
+    dfT = df.T
+    
+    ax = dfT.plot.bar(stacked=True)
+    ax.legend(bbox_to_anchor=(1.05, 1))
+    ax.set_xlabel(provincias[0])
+    ax.set_ylabel('Frecuencia')
+    ax.set_xticks([])
+    ax.plot()
+    
+    # rcParams['figure.dpi'] = 150
+    # rcParams['figure.figsize'] = (6, 9)
+    # plt.bar(0, localidades_5[0], edgecolor = 'black', width = 0.2)
+    # for i in range (1, len(localidades_5)):
+    #     plt.bar(0, localidades_5[i], bottom = localidades_5[i-1], edgecolor = 'black', width = 0.2)
+    # plt.legend(labels_5, bbox_to_anchor=(1.05, 1))
+    # plt.ylabel('Frecuencia')
+    # plt.xlabel(provincias[0])
+    # plt.xticks([])
+    # plt.show()
 
 db = loadDatabase()
 
@@ -209,10 +228,10 @@ mediaPaises = media_tiempo_de_envio_por_pais(paisDict)
 for idx, x in paisDict.items():
     mini, maxi = min_max(x)
     print(f'{idx}: Min: {mini} - Max: {maxi}')
-    
-paisDict2, totalDict = provincia_origen_especifico(db)
-listaProvincia = cantPorProvincia(paisDict2)
-for x in listaProvincia:
-    print(f'{x[0]}: {x[1]}')
+
+provinciasFrec = db['provincia'].value_counts()
+
+stacked_bar_localidades(db)
+# print(provinciasFrec)
 
 # db.to_csv('Exportaciones_d.csv')
